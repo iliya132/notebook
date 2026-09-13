@@ -15,6 +15,11 @@ replay_pid*
 
 # Dependencies and build output
 node_modules/
+.gradle/
+build/
+.classpath
+.project
+.settings/
 .next/
 out/
 dist/
