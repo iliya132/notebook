@@ -58,4 +58,30 @@ describe('SSR renderer', () => {
       expect.objectContaining({ name: 'react' }),
     ]))
   })
+
+  it('authenticates and renders the profile route on the server', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'user-1', name: 'Анна Смирнова', email: 'anna@example.test', createdAt: '2026-09-15T00:00:00Z',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await render('/app/profile', { cookie: 'SESSION=valid' }, 'http://localhost:8080')
+
+    expect(result.status).toBe(200)
+    expect(result.head).toContain('Профиль — Notebook')
+    expect(result.html).toContain('Анна Смирнова')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('authenticates the settings route before server rendering', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'user-1', name: 'Анна Смирнова', email: 'anna@example.test', createdAt: '2026-09-15T00:00:00Z',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    const result = await render('/app/settings', { cookie: 'SESSION=valid' }, 'http://localhost:8080')
+
+    expect(result.status).toBe(200)
+    expect(result.head).toContain('Настройки — Notebook')
+    expect(result.html).toContain('Тема оформления')
+  })
 })

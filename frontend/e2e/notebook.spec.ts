@@ -11,6 +11,18 @@ test('complete private and public note lifecycle', async ({ page, browser }) => 
   await expect(page.getByText('E2E User')).toBeVisible()
   await expect(page.getByText(email)).toBeVisible()
 
+  await page.getByLabel('Открыть меню аккаунта').click()
+  await page.getByRole('link', { name: 'Настройки' }).click()
+  await page.getByRole('radio', { name: /Тёмная/ }).check()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.getByLabel('Открыть меню аккаунта').click()
+  await page.getByRole('link', { name: 'Профиль' }).click()
+  await expect(page.getByRole('heading', { name: 'E2E User' })).toBeVisible()
+  await expect(page.getByText(email).last()).toBeVisible()
+  await page.getByRole('link', { name: 'Notebook — все записные книжки' }).click()
+
   await page.getByRole('button', { name: 'Создать записную книжку' }).click()
   await expect(page.getByRole('heading', { name: 'Новая записная книжка' })).toBeVisible()
   await page.getByRole('button', { name: 'Переименовать' }).click()

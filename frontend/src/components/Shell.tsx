@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import type { User } from '../types'
 import { GlobalNoteSearch } from './GlobalNoteSearch'
@@ -14,11 +14,18 @@ export function Shell() {
     <Link to="/app" className="brand" aria-label="Notebook — все записные книжки"><span className="brand-mark">N</span><span>Notebook</span></Link>
     <GlobalNoteSearch />
     <div className="account-area">
-      <div className="account" aria-label="Текущий аккаунт">
+      <details className="account-menu">
+      <summary className="account" aria-label="Открыть меню аккаунта">
         <span className="account-avatar" aria-hidden="true">{initials}</span>
         <span className="account-copy">{account.data ? <><strong>{account.data.name}</strong><small>{account.data.email}</small></> : <small>{account.isError ? 'Аккаунт недоступен' : 'Загружаем аккаунт…'}</small>}</span>
-      </div>
-      <button className="ghost logout-button" disabled={logout.isPending} onClick={() => logout.mutate()}>Выйти</button>
+        <span className="menu-chevron" aria-hidden="true">⌄</span>
+      </summary>
+      <nav className="account-popover" aria-label="Меню аккаунта">
+        <NavLink to="/app/profile">Профиль</NavLink>
+        <NavLink to="/app/settings">Настройки</NavLink>
+        <button type="button" disabled={logout.isPending} onClick={() => logout.mutate()}>{logout.isPending ? 'Выходим…' : 'Выйти'}</button>
+      </nav>
+      </details>
     </div>
   </header><Outlet /></div>
 }

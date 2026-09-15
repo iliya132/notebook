@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
@@ -13,7 +13,7 @@ vi.mock('../api', async importOriginal => {
 describe('Shell', () => {
   afterEach(() => vi.clearAllMocks())
 
-  it('shows the signed-in account next to logout', async () => {
+  it('opens account navigation with profile, settings and logout', async () => {
     vi.mocked(api).mockImplementation(async path => {
       if (path === '/auth/me') return { id: 'user-1', name: 'Анна Смирнова', email: 'anna@example.test', createdAt: '2026-09-15T00:00:00Z' }
       throw new Error(`Unexpected API call: ${path}`)
@@ -29,6 +29,9 @@ describe('Shell', () => {
 
     expect(await screen.findByText('Анна Смирнова')).toBeInTheDocument()
     expect(screen.getByText('anna@example.test')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Открыть меню аккаунта'))
+    expect(screen.getByRole('link', { name: 'Профиль' })).toHaveAttribute('href', '/app/profile')
+    expect(screen.getByRole('link', { name: 'Настройки' })).toHaveAttribute('href', '/app/settings')
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument()
   })
 })

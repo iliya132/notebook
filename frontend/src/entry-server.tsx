@@ -5,7 +5,7 @@ import { dehydrate, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import App from './App'
 import { createQueryClient } from './queryClient'
-import type { ApiError, Note, Notebook, NotebookDetail, PublicNote } from './types'
+import type { ApiError, Note, Notebook, NotebookDetail, PublicNote, User } from './types'
 
 type RequestHeaders = Record<string, string | string[] | undefined>
 
@@ -125,7 +125,7 @@ export async function render(url: string, headers: RequestHeaders, apiOrigin: st
   const requestUrl = new URL(url, 'http://ssr.local')
   const path = requestUrl.pathname
   if (path === '/') return { status: 302, redirect: '/app' }
-  const privateRoute = /^\/app\/?$/.test(path) || /^\/app\/(notebooks|notes)\/[^/]+\/?$/.test(path)
+  const privateRoute = /^\/app\/?$/.test(path) || /^\/app\/(profile|settings)\/?$/.test(path) || /^\/app\/(notebooks|notes)\/[^/]+\/?$/.test(path)
   const publicRoute = /^\/share\/[^/]+\/?$/.test(path)
   if (!['/login', '/register'].includes(path) && !path.startsWith('/app') && !path.startsWith('/share/')) {
     return { status: 302, redirect: '/app' }
@@ -154,6 +154,10 @@ export async function render(url: string, headers: RequestHeaders, apiOrigin: st
       const id = encodeURIComponent(noteMatch[1])
       matchedKey = ['note', noteMatch[1]]
       await client.prefetchQuery({ queryKey: matchedKey, queryFn: () => serverApi<Note>(`/notes/${id}`, headers, apiOrigin, 'note', timings) })
+    } else if (/^\/app\/(profile|settings)\/?$/.test(path)) {
+      matchedKey = ['account']
+      await client.prefetchQuery({ queryKey: matchedKey, queryFn: () => serverApi<User>('/auth/me', headers, apiOrigin, 'account', timings) })
+      title = path.startsWith('/app/profile') ? 'Профиль — Notebook' : 'Настройки — Notebook'
     }
     timings.push({ name: 'route_data', duration: performance.now() - dataStarted, description: 'Critical route data' })
 

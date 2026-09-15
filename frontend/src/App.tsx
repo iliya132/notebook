@@ -9,6 +9,8 @@ const NotebookPage = lazy(() => import('./components/NotebookPage').then(module 
 const NotebooksPage = lazy(() => import('./components/NotebooksPage').then(module => ({ default: module.NotebooksPage })))
 const NotePage = lazy(() => import('./components/NotePage').then(module => ({ default: module.NotePage })))
 const PublicPage = lazy(() => import('./components/PublicPage').then(module => ({ default: module.PublicPage })))
+const ProfilePage = lazy(() => import('./components/ProfilePage').then(module => ({ default: module.ProfilePage })))
+const SettingsPage = lazy(() => import('./components/SettingsPage').then(module => ({ default: module.SettingsPage })))
 const Shell = lazy(() => import('./components/Shell').then(module => ({ default: module.Shell })))
 
 function Protected() {
@@ -30,7 +32,7 @@ export default function App() {
     <Route path="/login" element={<AuthPage mode="login" />} />
     <Route path="/register" element={<AuthPage mode="register" />} />
     <Route path="/share/:token" element={<PublicPage />} />
-    <Route element={<Protected />}><Route element={<Shell />}><Route path="/app" element={<NotebooksPage />} /><Route path="/app/notebooks/:notebookId" element={<NotebookPage />} /><Route path="/app/notes/:noteId" element={<NotePage />} /></Route></Route>
+    <Route element={<Protected />}><Route element={<Shell />}><Route path="/app" element={<NotebooksPage />} /><Route path="/app/notebooks/:notebookId" element={<NotebookPage />} /><Route path="/app/notes/:noteId" element={<NotePage />} /><Route path="/app/profile" element={<ProfilePage />} /><Route path="/app/settings" element={<SettingsPage />} /></Route></Route>
     <Route path="*" element={<Navigate to="/app" replace />} />
   </Routes></Suspense>
 }
