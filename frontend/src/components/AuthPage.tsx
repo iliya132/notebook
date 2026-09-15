@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { api, message } from '../api'
 import type { User } from '../types'
@@ -15,10 +15,13 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   type Values = z.infer<typeof schema>
   const { register, handleSubmit, formState: { errors } } = useForm<Values>({ resolver: zodResolver(schema) })
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requestedPath = searchParams.get('next')
+  const destination = requestedPath?.startsWith('/app') ? requestedPath : '/app'
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: (values: Values) => api<User>(`/auth/${mode}`, { method: 'POST', body: JSON.stringify(values) }),
-    onSuccess: (user) => { queryClient.setQueryData(['me'], user); navigate('/app') },
+    onSuccess: (user) => { queryClient.setQueryData(['me'], user); navigate(destination) },
   })
   return <main className="auth-page"><section className="auth-card">
     <Link className="brand" to="/">Notebook</Link>

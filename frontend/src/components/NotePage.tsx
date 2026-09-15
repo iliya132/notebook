@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { api, message } from '../api'
-import type { Note } from '../types'
+import type { Note, NotebookDetail } from '../types'
 import { Markdown } from './Markdown'
 
 type Share = { enabled: boolean; url?: string }
 
 export function NotePage() {
   const { noteId = '' } = useParams()
-  const query = useQuery({ queryKey: ['note', noteId], queryFn: () => api<Note>(`/notes/${noteId}`) })
+  const query = useQuery({ queryKey: ['note', noteId], queryFn: ({ signal }) => api<Note>(`/notes/${noteId}`, { signal }) })
   if (query.isPending) return <main className="page"><p className="state">Открываем заметку…</p></main>
   if (query.isError) return <main className="page"><p className="error">{message(query.error)}</p></main>
   // Keep the editor mounted when a save updates the server-side version. A user can
@@ -23,13 +23,25 @@ function NoteEditor({ initial }: { initial: Note }) {
   const [content, setContent] = useState(initial.content)
   const [version, setVersion] = useState(initial.version)
   const [saved, setSaved] = useState({ title: initial.title, content: initial.content })
+  const previewContent = useDeferredValue(content)
   const navigate = useNavigate()
   const client = useQueryClient()
   const first = useRef(true)
   const dirty = title !== saved.title || content !== saved.content
   const save = useMutation({
     mutationFn: () => api<Note>(`/notes/${initial.id}`, { method: 'PUT', body: JSON.stringify({ title, content, version }) }),
-    onSuccess: note => { setVersion(note.version); setSaved({ title: note.title, content: note.content }); client.setQueryData(['note', initial.id], note); void client.invalidateQueries({ queryKey: ['notebook', initial.notebookId] }) },
+    onSuccess: note => {
+      setVersion(note.version)
+      setSaved({ title: note.title, content: note.content })
+      client.setQueryData(['note', initial.id], note)
+      client.setQueryData<NotebookDetail>(['notebook', initial.notebookId], current => current ? {
+        ...current,
+        notes: [
+          { id: note.id, title: note.title, version: note.version, updatedAt: note.updatedAt },
+          ...current.notes.filter(summary => summary.id !== note.id),
+        ],
+      } : current)
+    },
   })
   const { mutate: saveNote, isPending: savePending } = save
   const blocker = useBlocker(dirty || savePending)
@@ -67,8 +79,8 @@ function NoteEditor({ initial }: { initial: Note }) {
     return () => window.removeEventListener('beforeunload', warnAboutUnsavedChanges)
   }, [dirty, savePending])
 
-  const remove = useMutation({ mutationFn: () => api<void>(`/notes/${initial.id}`, { method: 'DELETE' }), onSuccess: () => { void client.invalidateQueries({ queryKey: ['notebook', initial.notebookId] }); navigate(`/app/notebooks/${initial.notebookId}`) } })
-  const status = useQuery({ queryKey: ['share', initial.id], queryFn: () => api<Share>(`/notes/${initial.id}/share`) })
+  const remove = useMutation({ mutationFn: () => api<void>(`/notes/${initial.id}`, { method: 'DELETE' }), onSuccess: () => { client.removeQueries({ queryKey: ['note', initial.id] }); client.setQueryData<NotebookDetail>(['notebook', initial.notebookId], current => current ? { ...current, notes: current.notes.filter(note => note.id !== initial.id) } : current); navigate(`/app/notebooks/${initial.notebookId}`) } })
+  const status = useQuery({ queryKey: ['share', initial.id], queryFn: ({ signal }) => api<Share>(`/notes/${initial.id}/share`, { signal }) })
   const share = useMutation({ mutationFn: () => api<Share>(`/notes/${initial.id}/share`, { method: 'POST' }), onSuccess: result => { client.setQueryData(['share', initial.id], result); if (result.url) void navigator.clipboard?.writeText(result.url) } })
   const revoke = useMutation({ mutationFn: () => api<void>(`/notes/${initial.id}/share`, { method: 'DELETE' }), onSuccess: () => client.setQueryData(['share', initial.id], { enabled: false }) })
   const error = save.error ?? remove.error ?? share.error ?? revoke.error
@@ -87,6 +99,6 @@ function NoteEditor({ initial }: { initial: Note }) {
     <div className="editor-toolbar"><Link className="back" to={`/app/notebooks/${initial.notebookId}`}>← К заметкам</Link><div className={`save-state ${save.isError ? 'failed' : ''}`} aria-live="polite">{save.isPending ? 'Сохраняем…' : save.isError ? 'Не сохранено' : dirty ? 'Есть изменения' : 'Сохранено'}</div><div className="toolbar-actions"><button className="primary" disabled={!dirty || !title.trim() || save.isPending} onClick={() => saveNote()}>Сохранить</button>{status.data?.enabled ? <button className="ghost" onClick={() => revoke.mutate()}>Отключить ссылку</button> : <button className="ghost" onClick={() => share.mutate()}>Поделиться</button>}<button className="danger ghost" onClick={() => { if (window.confirm('Удалить заметку? Это действие нельзя отменить.')) remove.mutate() }}>Удалить</button></div></div>
     {share.data?.url && <div className="share-banner" role="status">Ссылка скопирована: <a href={share.data.url} target="_blank" rel="noreferrer">открыть</a></div>}
     {error && <p className="error wide">{message(error)} {save.isError && <button onClick={() => save.mutate()}>Повторить</button>}</p>}
-    <div className="editor-grid"><section className="writing"><label htmlFor="note-title">Название</label><input id="note-title" className="title-input" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} /><label htmlFor="note-content">Markdown</label><textarea id="note-content" value={content} maxLength={1_048_576} onChange={e => setContent(e.target.value)} placeholder="Начните писать…" /></section><section className="preview" aria-label="Предпросмотр"><p className="eyebrow">Предпросмотр</p><Markdown>{content}</Markdown></section></div>
+    <div className="editor-grid"><section className="writing"><label htmlFor="note-title">Название</label><input id="note-title" className="title-input" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} /><label htmlFor="note-content">Markdown</label><textarea id="note-content" value={content} maxLength={1_048_576} onChange={e => setContent(e.target.value)} placeholder="Начните писать…" /></section><section className="preview" aria-label="Предпросмотр"><p className="eyebrow">Предпросмотр</p><Markdown>{previewContent}</Markdown></section></div>
   </main>
 }

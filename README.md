@@ -1,7 +1,7 @@
 # Notebook
 
 Полноценное приложение личных Markdown-заметок: Java 21 / Spring Boot API,
-React / TypeScript SPA и PostgreSQL. Поддерживает несколько книжек, безопасное
+React / TypeScript с SSR и PostgreSQL. Поддерживает несколько книжек, безопасное
 автосохранение, cookie-сессии и отзывные публичные ссылки только для чтения.
 
 ## Архитектура и безопасность
@@ -18,6 +18,10 @@ React / TypeScript SPA и PostgreSQL. Поддерживает нескольк�
 - Markdown отображается без raw HTML и проходит `rehype-sanitize`.
 - Локальный rate limiter защищает login/register/public resolve. Для нескольких
   production-инстансов замените его общим gateway/Redis limiter.
+- Node/Vite SSR заранее получает данные текущего маршрута, передавая backend только
+  входящую cookie, и безопасно гидратирует TanStack Query без повторного запроса.
+  Персонализированный HTML имеет `Cache-Control: private, no-store`, а хешированные
+  клиентские assets кешируются неизменно на год.
 
 ## Требования
 
@@ -33,7 +37,7 @@ docker compose up -d postgres
 cd backend
 ./gradlew bootRun
 
-# в другом терминале
+# в другом терминале: SSR dev-сервер + HMR + proxy /api
 cd frontend
 npm ci
 npm run dev
@@ -42,6 +46,20 @@ npm run dev
 Откройте <http://localhost:5173>. Vite проксирует `/api` на backend. Swagger UI:
 <http://localhost:8080/swagger-ui.html>; health probes: `/actuator/health/liveness`
 и `/actuator/health/readiness`.
+
+Production-сборка создаёт отдельные client и server bundles. `API_ORIGIN` —
+внутренний адрес Spring API, недоступный браузеру напрямую:
+
+```bash
+cd frontend
+npm ci
+npm run build
+API_ORIGIN=http://localhost:8080 PORT=5173 npm run start
+```
+
+На Windows задайте те же переменные через `$env:API_ORIGIN` и `$env:PORT`.
+Публичный reverse proxy должен направлять трафик на SSR-сервер; тот сам проксирует
+`/api` в Spring, сохраняя единый origin для cookie и CSRF.
 
 Локальные defaults БД — `notebook/notebook`. Для других значений экспортируйте
 переменные из локального, игнорируемого `.env`.

@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "node server.mjs",
+    "build": "tsc -b && vite build --outDir dist/client && vite build --ssr src/entry-server.tsx --outDir dist/server",
+    "start": "node server.mjs --prod",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest",

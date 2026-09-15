@@ -4,4 +4,4 @@ export type NoteSummary = { id: string; title: string; version: number; updatedA
 export type NotebookDetail = Notebook & { notes: NoteSummary[] }
 export type Note = { id: string; notebookId: string; title: string; content: string; version: number; createdAt: string; updatedAt: string }
 export type PublicNote = Pick<Note, 'title' | 'content' | 'updatedAt'>
-export type ApiError = { code: string; message: string; fields?: Record<string, string> }
+export type ApiError = { code: string; message: string; fields?: Record<string, string>; status?: number }

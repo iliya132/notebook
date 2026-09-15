@@ -11,7 +11,7 @@ async function csrf(): Promise<string> {
 }
 
 async function error(response: Response): Promise<ApiError> {
-  try { return await response.json() as ApiError } catch { return { code: 'network_error', message: 'Не удалось выполнить запрос' } }
+  try { return { ...await response.json() as ApiError, status: response.status } } catch { return { code: 'network_error', message: 'Не удалось выполнить запрос', status: response.status } }
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {

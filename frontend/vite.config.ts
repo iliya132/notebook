@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [react()],
   server: {
     proxy: {
@@ -14,15 +14,16 @@ export default defineConfig({
     },
   },
   test: { environment: 'jsdom', globals: true, include: ['src/**/*.test.{ts,tsx}'], setupFiles: './src/test/setup.ts' },
-  build: {
+  build: isSsrBuild ? undefined : {
     rollupOptions: {
       output: {
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
-          data: ['@tanstack/react-query', 'react-hook-form', '@hookform/resolvers', 'zod'],
+          query: ['@tanstack/react-query'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
           markdown: ['react-markdown', 'remark-gfm', 'rehype-sanitize'],
         },
       },
     },
   },
-})
+}))
