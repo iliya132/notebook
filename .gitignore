@@ -4,6 +4,8 @@
 *.ctxt
 .mtj.tmp/
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.nar
 *.ear
@@ -16,6 +18,7 @@ replay_pid*
 # Dependencies and build output
 node_modules/
 .gradle/
+.gradle-user/
 build/
 .classpath
 .project
@@ -26,11 +29,13 @@ dist/
 coverage/
 playwright-report/
 test-results/
+*.tsbuildinfo
 
 # Local environment and secrets
 .env
 .env.*
 !.env.example
+.local/
 
 # Logs and local tooling
 .DS_Store

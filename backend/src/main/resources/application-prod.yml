@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${DB_PASSWORD}
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+app:
+  frontend-origin: ${FRONTEND_ORIGIN}
+  public-base-url: ${PUBLIC_BASE_URL}
