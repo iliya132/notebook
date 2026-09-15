@@ -1,5 +1,5 @@
-import { useRef, type RefObject } from 'react'
-import { applyMarkdownAction, type MarkdownAction } from '../markdownFormatting'
+import { useRef, useState, type RefObject } from 'react'
+import { applyMarkdownAction, EDITOR_SHORTCUTS, type MarkdownAction } from '../markdownFormatting'
 
 type Selection = { start: number; end: number }
 
@@ -21,6 +21,7 @@ const actions: Array<{ action: MarkdownAction; label: string; glyph: string }> =
 
 export function MarkdownToolbar({ value, onChange, textareaRef }: { value: string; onChange: (value: string) => void; textareaRef: RefObject<HTMLTextAreaElement | null> }) {
   const pendingSelection = useRef<Selection | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const apply = (action: MarkdownAction) => {
     const textarea = textareaRef.current
@@ -53,5 +54,14 @@ export function MarkdownToolbar({ value, onChange, textareaRef }: { value: strin
       }}
       onClick={() => apply(action)}
     >{glyph}</button>)}
+    <div className="shortcut-help" onMouseEnter={() => setHelpOpen(true)} onMouseLeave={() => setHelpOpen(false)} onFocus={() => setHelpOpen(true)} onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setHelpOpen(false)
+    }}>
+      <button type="button" className="shortcut-help-button" aria-label="Сочетания клавиш" aria-expanded={helpOpen} aria-controls="editor-shortcuts">?</button>
+      <div id="editor-shortcuts" className="shortcut-tooltip" role="tooltip" hidden={!helpOpen}>
+        <strong>Сочетания клавиш</strong>
+        <dl>{EDITOR_SHORTCUTS.map(shortcut => <div key={shortcut.command}><dt>{shortcut.label}</dt><dd><kbd>{shortcut.keys}</kbd></dd></div>)}</dl>
+      </div>
+    </div>
   </div>
 }

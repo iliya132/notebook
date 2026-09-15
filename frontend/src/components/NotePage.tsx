@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { api, message } from '../api'
+import { applyMarkdownAction, editorShortcutFor } from '../markdownFormatting'
 import type { Note, NotebookDetail } from '../types'
 import { Markdown } from './Markdown'
 import { MarkdownToolbar } from './MarkdownToolbar'
@@ -87,7 +88,25 @@ function NoteEditor({ initial }: { initial: Note }) {
   const share = useMutation({ mutationFn: () => api<Share>(`/notes/${initial.id}/share`, { method: 'POST' }), onSuccess: result => { client.setQueryData(['share', initial.id], result); if (result.url) void navigator.clipboard?.writeText(result.url) } })
   const revoke = useMutation({ mutationFn: () => api<void>(`/notes/${initial.id}/share`, { method: 'DELETE' }), onSuccess: () => client.setQueryData(['share', initial.id], { enabled: false }) })
   const error = save.error ?? remove.error ?? share.error ?? revoke.error
-  return <main className="editor-page">
+  const handleEditorShortcut = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const command = editorShortcutFor(event.nativeEvent)
+    if (!command) return
+    if (command === 'save') {
+      event.preventDefault()
+      if (dirty && title.trim() && !savePending) saveNote()
+      return
+    }
+    const textarea = textareaRef.current
+    if (event.target !== textarea || !textarea) return
+    event.preventDefault()
+    const edit = applyMarkdownAction(content, { start: textarea.selectionStart, end: textarea.selectionEnd }, command)
+    setContent(edit.value)
+    window.requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(edit.start, edit.end)
+    })
+  }
+  return <main className="editor-page" onKeyDown={handleEditorShortcut}>
     {blocker.state === 'blocked' && <div className="leave-guard" role="alertdialog" aria-modal="true" aria-labelledby="leave-guard-title">
       <div className="leave-guard-card">
         <h2 id="leave-guard-title">Есть несохранённые изменения</h2>

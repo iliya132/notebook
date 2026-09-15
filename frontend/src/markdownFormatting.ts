@@ -13,6 +13,35 @@ export type MarkdownAction =
   | 'table'
   | 'divider'
 
+export type EditorShortcutCommand = 'save' | MarkdownAction
+
+export type EditorShortcut = {
+  command: EditorShortcutCommand
+  label: string
+  keys: string
+  code: string
+  shift?: boolean
+}
+
+export const EDITOR_SHORTCUTS: EditorShortcut[] = [
+  { command: 'save', label: 'Сохранить заметку', keys: 'Ctrl/⌘ + S', code: 'KeyS' },
+  { command: 'bold', label: 'Жирный', keys: 'Ctrl/⌘ + B', code: 'KeyB' },
+  { command: 'italic', label: 'Курсив', keys: 'Ctrl/⌘ + I', code: 'KeyI' },
+  { command: 'link', label: 'Ссылка', keys: 'Ctrl/⌘ + K', code: 'KeyK' },
+  { command: 'inlineCode', label: 'Однострочный код', keys: 'Ctrl/⌘ + E', code: 'KeyE' },
+  { command: 'strike', label: 'Зачёркнутый', keys: 'Ctrl/⌘ + Shift + X', code: 'KeyX', shift: true },
+  { command: 'numberedList', label: 'Нумерованный список', keys: 'Ctrl/⌘ + Shift + 7', code: 'Digit7', shift: true },
+  { command: 'bulletList', label: 'Маркированный список', keys: 'Ctrl/⌘ + Shift + 8', code: 'Digit8', shift: true },
+  { command: 'quote', label: 'Цитата', keys: 'Ctrl/⌘ + Shift + .', code: 'Period', shift: true },
+]
+
+type ShortcutEvent = Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey'>
+
+export function editorShortcutFor(event: ShortcutEvent): EditorShortcutCommand | null {
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey) return null
+  return EDITOR_SHORTCUTS.find(shortcut => shortcut.code === event.code && Boolean(shortcut.shift) === event.shiftKey)?.command ?? null
+}
+
 type Selection = { start: number; end: number }
 export type MarkdownEdit = Selection & { value: string }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMarkdownAction } from '../markdownFormatting'
+import { applyMarkdownAction, editorShortcutFor } from '../markdownFormatting'
 
 describe('applyMarkdownAction', () => {
   it('wraps selected text and keeps the selection inside markers', () => {
@@ -29,5 +29,12 @@ describe('applyMarkdownAction', () => {
   it('inserts a table template when there is no selection', () => {
     expect(applyMarkdownAction('', { start: 0, end: 0 }, 'table').value)
       .toContain('| Колонка 1 | Колонка 2 |')
+  })
+
+  it('maps classic control and command shortcuts to editor commands', () => {
+    expect(editorShortcutFor({ altKey: false, code: 'KeyS', ctrlKey: true, metaKey: false, shiftKey: false })).toBe('save')
+    expect(editorShortcutFor({ altKey: false, code: 'KeyB', ctrlKey: false, metaKey: true, shiftKey: false })).toBe('bold')
+    expect(editorShortcutFor({ altKey: false, code: 'Digit8', ctrlKey: true, metaKey: false, shiftKey: true })).toBe('bulletList')
+    expect(editorShortcutFor({ altKey: true, code: 'KeyB', ctrlKey: true, metaKey: false, shiftKey: false })).toBeNull()
   })
 })

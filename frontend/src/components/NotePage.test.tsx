@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
@@ -151,5 +151,64 @@ describe('NotePage autosave', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Жирный' }))
 
     expect(editor).toHaveValue('**Исходный** текст')
+  })
+
+  it('formats selected text with Ctrl+B', async () => {
+    vi.mocked(api).mockImplementation(async (path, options = {}) => {
+      if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
+      if (path === '/notes/note-1/share') return { enabled: false }
+      throw new Error(`Unexpected API call: ${path}`)
+    })
+
+    renderEditor()
+    const editor = await screen.findByLabelText('Markdown')
+    const textarea = editor as HTMLTextAreaElement
+    textarea.setSelectionRange(0, 8)
+    fireEvent.keyDown(editor, { key: 'b', code: 'KeyB', ctrlKey: true })
+
+    expect(editor).toHaveValue('**Исходный** текст')
+  })
+
+  it('saves pending edits immediately with Ctrl+S', async () => {
+    const savedRequests: Array<{ title: string; content: string; version: number }> = []
+    vi.mocked(api).mockImplementation(async (path, options = {}) => {
+      if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
+      if (path === '/notes/note-1/share') return { enabled: false }
+      if (path === '/notes/note-1' && options.method === 'PUT') {
+        const request = JSON.parse(String(options.body)) as { title: string; content: string; version: number }
+        savedRequests.push(request)
+        return { ...initial, ...request, version: request.version + 1 }
+      }
+      throw new Error(`Unexpected API call: ${path}`)
+    })
+
+    renderEditor()
+    const editor = await screen.findByLabelText('Markdown')
+    fireEvent.change(editor, { target: { value: 'Сохранить сейчас' } })
+    fireEvent.keyDown(editor, { key: 's', code: 'KeyS', ctrlKey: true })
+
+    await waitFor(() => expect(savedRequests).toEqual([{ title: 'Заметка', content: 'Сохранить сейчас', version: 1 }]))
+  })
+
+  it('shows the shortcut reference on hover and keyboard focus', async () => {
+    vi.mocked(api).mockImplementation(async (path, options = {}) => {
+      if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
+      if (path === '/notes/note-1/share') return { enabled: false }
+      throw new Error(`Unexpected API call: ${path}`)
+    })
+
+    renderEditor()
+    const help = await screen.findByRole('button', { name: 'Сочетания клавиш' })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    fireEvent.mouseEnter(help)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Ctrl/⌘ + S')
+
+    fireEvent.mouseLeave(help)
+    fireEvent.focus(help)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Жирный')
   })
 })
