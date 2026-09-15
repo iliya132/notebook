@@ -1,37 +1,26 @@
 name: notebook-release
 
 services:
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-notebook}
-      POSTGRES_USER: ${POSTGRES_USER:-notebook}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.release}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
-    volumes:
-      - notebook-postgres:/var/lib/postgresql/data
-    restart: unless-stopped
-
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-notebook}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-notebook}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.release}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://release-script-required.invalid:6432/invalid}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:?Set SPRING_DATASOURCE_USERNAME in .env.release}
+      DB_PASSWORD: ${DB_PASSWORD:-release-script-required}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5173}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75.0}
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.local/yandex-cloud/root.crt
+        target: /etc/ssl/certs/yandex-cloud-root.crt
+        read_only: true
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
       interval: 5s
@@ -57,8 +46,5 @@ services:
       retries: 12
       start_period: 5s
     ports:
-      - "${APP_PORT:-5173}:5173"
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-5173}:5173"
     restart: unless-stopped
-
-volumes:
-  notebook-postgres:

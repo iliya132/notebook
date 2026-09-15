@@ -121,8 +121,19 @@ API_ORIGIN=http://localhost:8080 PORT=5173 npm run start
 
 ## Docker-релиз
 
-Release Compose поднимает PostgreSQL, Spring Boot backend и production SSR
-frontend. Скопируйте пример окружения и обязательно замените пароль:
+Release Compose поднимает Spring Boot backend и production SSR frontend. Backend
+всегда подключается к Managed PostgreSQL в Yandex Cloud по TLS `verify-full`;
+локальная БД и автоматический fallback принципиально не поддерживаются.
+
+Нужны запущенный Docker Desktop с поддержкой `docker compose`, установленный
+Yandex Cloud CLI (`yc`) и выполненный `yc init`. Аккаунту `yc` необходимы права на
+просмотр кластера, базы и пользователя, а также чтение payload указанного секрета
+Lockbox. Скрипт проверяет состояние облачного кластера до остановки текущего
+релиза.
+
+### Первый запуск на Windows
+
+Откройте PowerShell в корне репозитория и создайте локальный файл окружения:
 
 ```powershell
 Copy-Item .env.release.example .env.release
@@ -130,12 +141,55 @@ notepad .env.release
 .\scripts\release.ps1
 ```
 
+В `.env.release` задаются ID кластера и Lockbox, имя облачной базы и пользователя.
+Пароль в файл не записывается: `release.ps1` получает его из Lockbox только в
+память процесса и очищает переменную после завершения. Файл `.env.release`
+игнорируется Git и не должен попадать в репозиторий.
+
+После успешного запуска откройте <http://localhost:5173>. Проверить ответ из
+PowerShell можно так:
+
+```powershell
+Invoke-WebRequest http://localhost:5173/login -UseBasicParsing
+```
+
+По умолчанию порты frontend и backend публикуются только на `127.0.0.1`.
+Backend доступен на `localhost:8080`, поэтому локальный Prometheus может собирать
+метрики release-контейнера. `BACKEND_PORT` меняет этот локальный порт. Чтобы
+открыть приложение в локальной сети, явно задайте `APP_BIND_ADDRESS=0.0.0.0` в
+`.env.release` и ограничьте доступ системным firewall; backend для мониторинга
+оставьте на loopback. `APP_PORT` меняет внешний порт приложения.
+
+### Повторный релиз
+
+После обновления исходного кода снова выполните:
+
+```powershell
+.\scripts\release.ps1
+```
+
+Запускайте стек только этим скриптом: прямой `docker compose up` не получает
+пароль из Lockbox и намеренно использует нерабочую cloud-конфигурацию. Команды
+просмотра состояния, логов и остановки ниже безопасно работают напрямую.
+
 Скрипт сначала проверяет конфигурацию и собирает новые образы, затем определяет,
 запущен ли текущий release-стек. Существующий стек останавливается командой
 `docker compose down` без флага `--volumes`, после чего новая версия запускается
-с ожиданием healthcheck всех сервисов. Поэтому именованный volume PostgreSQL и
-данные между релизами сохраняются. По умолчанию приложение доступно по адресу
-<http://localhost:5173>; порт задаётся через `APP_PORT`.
+с ожиданием healthcheck всех сервисов. Облачная PostgreSQL при этом не
+останавливается и не пересоздаётся.
+
+### Состояние, логи и остановка
+
+```powershell
+# Состояние и healthcheck контейнеров
+docker compose --project-name notebook-release --env-file .env.release --file docker-compose.release.yml ps
+
+# Логи приложения
+docker compose --project-name notebook-release --env-file .env.release --file docker-compose.release.yml logs --follow frontend backend
+
+# Остановка контейнеров приложения; облачная БД продолжает работать
+docker compose --project-name notebook-release --env-file .env.release --file docker-compose.release.yml down
+```
 
 При публикации через HTTPS укажите реальные `FRONTEND_ORIGIN` и `PUBLIC_BASE_URL`,
 а также `SESSION_COOKIE_SECURE=true`. Для другого env-файла используйте
