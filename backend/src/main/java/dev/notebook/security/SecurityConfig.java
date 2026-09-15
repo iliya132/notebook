@@ -55,6 +55,7 @@ public class SecurityConfig {
                         "/api/v1/auth/csrf",
                         "/api/v1/public/**",
                         "/actuator/health/**",
+                        "/actuator/prometheus",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html")

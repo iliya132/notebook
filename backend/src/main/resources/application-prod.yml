@@ -7,7 +7,7 @@ server:
   servlet:
     session:
       cookie:
-        secure: true
+        secure: ${SESSION_COOKIE_SECURE:true}
 app:
   frontend-origin: ${FRONTEND_ORIGIN}
   public-base-url: ${PUBLIC_BASE_URL}

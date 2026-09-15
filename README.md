@@ -7,6 +7,8 @@ React / TypeScript с SSR и PostgreSQL. Поддерживает несколь
 ## Архитектура и безопасность
 
 - REST API имеет версию `/api/v1`; JPA-сущности наружу не возвращаются.
+- Actuator/Micrometer экспортирует обезличенные HTTP, repository, Hibernate,
+  HikariCP и JVM-метрики в локальный Prometheus; Grafana настраивается из файлов.
 - Все приватные выборки ограничены `owner_id`: подстановка чужого UUID даёт `404`.
 - Пароли хешируются BCrypt cost 12. Сессии хранятся в PostgreSQL; cookie имеет
   `HttpOnly`, `SameSite=Lax`, а в production ещё `Secure`.
@@ -46,6 +48,23 @@ performance.getEntriesByType('measure')
 статус публичной ссылки догружается после показа редактора. При переходе из списка
 запрос заметки также начинается при наведении мышью или фокусе с клавиатуры.
 
+## Накопительные метрики и Grafana
+
+Prometheus опрашивает `GET /actuator/prometheus` раз в 5 секунд и хранит временные
+ряды 15 дней в Docker volume. Готовый дашборд **Notebook — performance** содержит:
+
+- throughput, 5xx rate и p50/p95/p99 полного времени API-запросов;
+- среднее и максимальное время Hibernate SELECT по шаблону запроса;
+- p95 методов Spring Data Repository, включая операции записи;
+- активные, свободные и ожидающие соединения HikariCP;
+- JVM heap и доступность backend.
+
+HTTP-маршруты представлены нормализованными шаблонами (`/notes/{noteId}`), поэтому
+UUID и публичные токены не создают высокую cardinality. DB label содержит только
+шаблон SQL с `?`, без bind-параметров и данных пользователя. Метрика repository
+покрывает полный метод репозитория, а `notebook_database_query_*` — непосредственно
+время SELECT, измеренное Hibernate.
+
 ## Требования
 
 - JDK 21+ (сборка использует `--release 21`);
@@ -55,7 +74,7 @@ performance.getEntriesByType('measure')
 ## Локальный запуск
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres prometheus grafana
 
 cd backend
 ./gradlew bootRun
@@ -70,6 +89,19 @@ npm run dev
 <http://localhost:8080/swagger-ui.html>; health probes: `/actuator/health/liveness`
 и `/actuator/health/readiness`.
 
+Grafana доступна на <http://localhost:3000>, готовый дашборд находится в папке
+`Notebook`. Локальные credentials по умолчанию — `admin` / `admin`; задайте
+`GRAFANA_ADMIN_USER` и `GRAFANA_ADMIN_PASSWORD` в игнорируемом `.env`, чтобы их
+изменить. Prometheus UI доступен на <http://localhost:9090>. Оба порта привязаны
+только к `127.0.0.1`. Backend должен работать на `localhost:8080`, как в команде
+выше; при его остановке история сохраняется, а новые точки временно не поступают.
+
+Остановить локальную инфраструктуру без удаления истории можно командой:
+
+```bash
+docker compose stop postgres prometheus grafana
+```
+
 Production-сборка создаёт отдельные client и server bundles. `API_ORIGIN` —
 внутренний адрес Spring API, недоступный браузеру напрямую:
 
@@ -83,6 +115,28 @@ API_ORIGIN=http://localhost:8080 PORT=5173 npm run start
 На Windows задайте те же переменные через `$env:API_ORIGIN` и `$env:PORT`.
 Публичный reverse proxy должен направлять трафик на SSR-сервер; тот сам проксирует
 `/api` в Spring, сохраняя единый origin для cookie и CSRF.
+
+## Docker-релиз
+
+Release Compose поднимает PostgreSQL, Spring Boot backend и production SSR
+frontend. Скопируйте пример окружения и обязательно замените пароль:
+
+```powershell
+Copy-Item .env.release.example .env.release
+notepad .env.release
+.\scripts\release.ps1
+```
+
+Скрипт сначала проверяет конфигурацию и собирает новые образы, затем определяет,
+запущен ли текущий release-стек. Существующий стек останавливается командой
+`docker compose down` без флага `--volumes`, после чего новая версия запускается
+с ожиданием healthcheck всех сервисов. Поэтому именованный volume PostgreSQL и
+данные между релизами сохраняются. По умолчанию приложение доступно по адресу
+<http://localhost:5173>; порт задаётся через `APP_PORT`.
+
+При публикации через HTTPS укажите реальные `FRONTEND_ORIGIN` и `PUBLIC_BASE_URL`,
+а также `SESSION_COOKIE_SECURE=true`. Для другого env-файла используйте
+`.\scripts\release.ps1 -EnvironmentFile C:\path\to\release.env`.
 
 Локальные defaults БД — `notebook/notebook`. Для других значений экспортируйте
 переменные из локального, игнорируемого `.env`.
