@@ -1,11 +1,24 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import type { User } from '../types'
 import { GlobalNoteSearch } from './GlobalNoteSearch'
 
 export function Shell() {
   const client = useQueryClient()
   const navigate = useNavigate()
+  const account = useQuery({ queryKey: ['account'], queryFn: ({ signal }) => api<User>('/auth/me', { signal }), enabled: typeof window !== 'undefined' })
   const logout = useMutation({ mutationFn: () => api<void>('/auth/logout', { method: 'POST' }), onSuccess: () => { client.clear(); navigate('/login') } })
-  return <div className="app-shell"><header><Link to="/app" className="brand">Notebook</Link><GlobalNoteSearch /><button className="ghost" onClick={() => logout.mutate()}>Выйти</button></header><Outlet /></div>
+  const initials = account.data?.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase('ru') || '…'
+  return <div className="app-shell"><header className="app-header">
+    <Link to="/app" className="brand" aria-label="Notebook — все записные книжки"><span className="brand-mark">N</span><span>Notebook</span></Link>
+    <GlobalNoteSearch />
+    <div className="account-area">
+      <div className="account" aria-label="Текущий аккаунт">
+        <span className="account-avatar" aria-hidden="true">{initials}</span>
+        <span className="account-copy">{account.data ? <><strong>{account.data.name}</strong><small>{account.data.email}</small></> : <small>{account.isError ? 'Аккаунт недоступен' : 'Загружаем аккаунт…'}</small>}</span>
+      </div>
+      <button className="ghost logout-button" disabled={logout.isPending} onClick={() => logout.mutate()}>Выйти</button>
+    </div>
+  </header><Outlet /></div>
 }

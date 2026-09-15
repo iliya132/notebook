@@ -4,6 +4,7 @@ import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { api, message } from '../api'
 import type { Note, NotebookDetail } from '../types'
 import { Markdown } from './Markdown'
+import { MarkdownToolbar } from './MarkdownToolbar'
 
 type Share = { enabled: boolean; url?: string }
 
@@ -27,6 +28,8 @@ function NoteEditor({ initial }: { initial: Note }) {
   const navigate = useNavigate()
   const client = useQueryClient()
   const first = useRef(true)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const notebook = useQuery({ queryKey: ['notebook', initial.notebookId], queryFn: ({ signal }) => api<NotebookDetail>(`/notebooks/${initial.notebookId}`, { signal }) })
   const dirty = title !== saved.title || content !== saved.content
   const save = useMutation({
     mutationFn: () => api<Note>(`/notes/${initial.id}`, { method: 'PUT', body: JSON.stringify({ title, content, version }) }),
@@ -96,9 +99,12 @@ function NoteEditor({ initial }: { initial: Note }) {
         </div>
       </div>
     </div>}
-    <div className="editor-toolbar"><Link className="back" to={`/app/notebooks/${initial.notebookId}`}>← К заметкам</Link><div className={`save-state ${save.isError ? 'failed' : ''}`} aria-live="polite">{save.isPending ? 'Сохраняем…' : save.isError ? 'Не сохранено' : dirty ? 'Есть изменения' : 'Сохранено'}</div><div className="toolbar-actions"><button className="primary" disabled={!dirty || !title.trim() || save.isPending} onClick={() => saveNote()}>Сохранить</button>{status.isPending ? <button className="ghost" disabled>Проверяем доступ…</button> : status.data?.enabled ? <button className="ghost" onClick={() => revoke.mutate()}>Отключить ссылку</button> : <button className="ghost" onClick={() => share.mutate()}>Поделиться</button>}<button className="danger ghost" onClick={() => { if (window.confirm('Удалить заметку? Это действие нельзя отменить.')) remove.mutate() }}>Удалить</button></div></div>
+    <nav className="breadcrumb" aria-label="Путь к заметке">
+      <Link to={`/app/notebooks/${initial.notebookId}`}>{notebook.data?.title ?? 'Записная книжка'}</Link><span aria-hidden="true">›</span><Link to={`/app/notes/${initial.id}`} aria-current="page">{title || 'Без названия'}</Link>
+    </nav>
+    <div className="editor-toolbar"><div className={`save-state ${save.isError ? 'failed' : ''}`} aria-live="polite">{save.isPending ? 'Сохраняем…' : save.isError ? 'Не сохранено' : dirty ? 'Есть изменения' : 'Сохранено'}</div><div className="toolbar-actions"><button className="primary" disabled={!dirty || !title.trim() || save.isPending} onClick={() => saveNote()}>Сохранить</button>{status.isPending ? <button className="ghost" disabled>Проверяем доступ…</button> : status.data?.enabled ? <button className="ghost" onClick={() => revoke.mutate()}>Отключить ссылку</button> : <button className="ghost" onClick={() => share.mutate()}>Поделиться</button>}<button className="danger ghost" onClick={() => { if (window.confirm('Удалить заметку? Это действие нельзя отменить.')) remove.mutate() }}>Удалить</button></div></div>
     {share.data?.url && <div className="share-banner" role="status">Ссылка скопирована: <a href={share.data.url} target="_blank" rel="noreferrer">открыть</a></div>}
     {error && <p className="error wide">{message(error)} {save.isError && <button onClick={() => save.mutate()}>Повторить</button>}</p>}
-    <div className="editor-grid"><section className="writing"><label htmlFor="note-title">Название</label><input id="note-title" className="title-input" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} /><label htmlFor="note-content">Markdown</label><textarea id="note-content" value={content} maxLength={1_048_576} onChange={e => setContent(e.target.value)} placeholder="Начните писать…" /></section><section className="preview" aria-label="Предпросмотр"><p className="eyebrow">Предпросмотр</p><Markdown>{previewContent}</Markdown></section></div>
+    <div className="editor-grid"><section className="writing"><label htmlFor="note-title">Название</label><input id="note-title" className="title-input" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} /><div className="editor-label-row"><label htmlFor="note-content">Markdown</label><span>Выделите текст и выберите формат</span></div><MarkdownToolbar value={content} onChange={setContent} textareaRef={textareaRef} /><textarea ref={textareaRef} id="note-content" value={content} maxLength={1_048_576} onChange={e => setContent(e.target.value)} placeholder="Начните писать…" /></section><section className="preview" aria-label="Предпросмотр"><p className="eyebrow">Предпросмотр</p><Markdown>{previewContent}</Markdown></section></div>
   </main>
 }

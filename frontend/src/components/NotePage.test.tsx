@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
-import type { Note } from '../types'
+import type { Note, NotebookDetail } from '../types'
 import { NotePage } from './NotePage'
 
 vi.mock('../api', async importOriginal => {
@@ -19,6 +19,15 @@ const initial: Note = {
   version: 1,
   createdAt: '2026-09-15T00:00:00Z',
   updatedAt: '2026-09-15T00:00:00Z',
+}
+
+const notebook: NotebookDetail = {
+  id: 'notebook-1',
+  title: 'Рабочие заметки',
+  version: 1,
+  createdAt: '2026-09-15T00:00:00Z',
+  updatedAt: '2026-09-15T00:00:00Z',
+  notes: [{ id: initial.id, title: initial.title, version: initial.version, updatedAt: initial.updatedAt }],
 }
 
 function renderEditor() {
@@ -43,6 +52,7 @@ describe('NotePage autosave', () => {
 
     vi.mocked(api).mockImplementation(async (path, options = {}) => {
       if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
       if (path === '/notes/note-1/share') return { enabled: false }
       if (path === '/notes/note-1' && options.method === 'PUT') {
         const request = JSON.parse(String(options.body)) as { title: string; content: string; version: number }
@@ -81,6 +91,7 @@ describe('NotePage autosave', () => {
 
     vi.mocked(api).mockImplementation(async (path, options = {}) => {
       if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
       if (path === '/notes/note-1/share') return { enabled: false }
       if (path === '/notes/note-1' && options.method === 'PUT') {
         const request = JSON.parse(String(options.body)) as { title: string; content: string; version: number }
@@ -93,7 +104,7 @@ describe('NotePage autosave', () => {
     renderEditor()
     const editor = await screen.findByLabelText('Markdown')
     fireEvent.change(editor, { target: { value: 'Текст перед переходом' } })
-    fireEvent.click(screen.getByRole('link', { name: /К заметкам/ }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Рабочие заметки' }))
 
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Сохраняем заметку перед переходом')
     expect(savedRequests).toEqual([{ title: 'Заметка', content: 'Текст перед переходом', version: 1 }])
@@ -110,6 +121,7 @@ describe('NotePage autosave', () => {
   it('requests browser confirmation when the tab closes with pending edits', async () => {
     vi.mocked(api).mockImplementation(async (path, options = {}) => {
       if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
       if (path === '/notes/note-1/share') return { enabled: false }
       throw new Error(`Unexpected API call: ${path}`)
     })
@@ -121,5 +133,23 @@ describe('NotePage autosave', () => {
     window.dispatchEvent(event)
 
     expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('formats selected text with the Markdown toolbar', async () => {
+    vi.mocked(api).mockImplementation(async (path, options = {}) => {
+      if (path === '/notes/note-1' && !options.method) return initial
+      if (path === '/notebooks/notebook-1') return notebook
+      if (path === '/notes/note-1/share') return { enabled: false }
+      throw new Error(`Unexpected API call: ${path}`)
+    })
+
+    renderEditor()
+    const editor = await screen.findByLabelText('Markdown')
+    const textarea = editor as HTMLTextAreaElement
+    textarea.setSelectionRange(0, 8)
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Жирный' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Жирный' }))
+
+    expect(editor).toHaveValue('**Исходный** текст')
   })
 })

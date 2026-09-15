@@ -21,7 +21,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: (values: Values) => api<User>(`/auth/${mode}`, { method: 'POST', body: JSON.stringify(values) }),
-    onSuccess: () => { queryClient.setQueryData(['session'], true); navigate(destination) },
+    onSuccess: user => { queryClient.setQueryData(['session'], true); queryClient.setQueryData(['account'], user); navigate(destination) },
   })
   return <main className="auth-page"><section className="auth-card">
     <Link className="brand" to="/">Notebook</Link>
