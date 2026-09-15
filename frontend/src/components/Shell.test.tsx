@@ -22,16 +22,28 @@ describe('Shell', () => {
     const router = createMemoryRouter([{
       path: '/app',
       element: <Shell />,
-      children: [{ index: true, element: <h1>Книжки</h1> }],
+      children: [
+        { index: true, element: <h1>Книжки</h1> },
+        { path: 'profile', element: <h1>Страница профиля</h1> },
+        { path: 'settings', element: <h1>Страница настроек</h1> },
+      ],
     }], { initialEntries: ['/app'] })
 
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
 
     expect(await screen.findByText('Анна Смирнова')).toBeInTheDocument()
     expect(screen.getByText('anna@example.test')).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Открыть меню аккаунта'))
+    const summary = screen.getByLabelText('Открыть меню аккаунта')
+    const menu = summary.closest('details')
+    fireEvent.click(summary)
     expect(screen.getByRole('link', { name: 'Профиль' })).toHaveAttribute('href', '/app/profile')
     expect(screen.getByRole('link', { name: 'Настройки' })).toHaveAttribute('href', '/app/settings')
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: 'Профиль' }))
+    expect(menu).not.toHaveAttribute('open')
+
+    fireEvent.click(summary)
+    fireEvent.click(screen.getByRole('link', { name: 'Настройки' }))
+    expect(menu).not.toHaveAttribute('open')
   })
 })
