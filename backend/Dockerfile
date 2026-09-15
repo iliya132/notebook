@@ -5,7 +5,8 @@ WORKDIR /workspace
 
 COPY backend/gradlew backend/settings.gradle.kts backend/build.gradle.kts ./
 COPY backend/gradle ./gradle
-RUN sed -i 's/^networkTimeout=.*/networkTimeout=60000/' gradle/wrapper/gradle-wrapper.properties \
+RUN sed -i 's/\r$//' gradlew gradle/wrapper/gradle-wrapper.properties \
+    && sed -i 's/^networkTimeout=.*/networkTimeout=60000/' gradle/wrapper/gradle-wrapper.properties \
     && chmod +x gradlew \
     && ./gradlew --no-daemon dependencies
 
