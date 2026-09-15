@@ -12,14 +12,14 @@ const PublicPage = lazy(() => import('./components/PublicPage').then(module => (
 const Shell = lazy(() => import('./components/Shell').then(module => ({ default: module.Shell })))
 
 function Protected() {
-  const me = useQuery({ queryKey: ['me'], queryFn: ({ signal }) => api<User>('/auth/me', { signal }), retry: false })
-  if (me.isPending) return <main className="auth-page"><p className="state">Проверяем сессию…</p></main>
-  if (me.isError) {
-    const status = typeof me.error === 'object' && me.error !== null && 'status' in me.error
-      ? (me.error as Partial<ApiError>).status
+  const session = useQuery({ queryKey: ['session'], queryFn: ({ signal }) => api<User>('/auth/me', { signal }).then(() => true), retry: false })
+  if (session.isPending) return <main className="auth-page"><p className="state">Проверяем сессию…</p></main>
+  if (session.isError) {
+    const status = typeof session.error === 'object' && session.error !== null && 'status' in session.error
+      ? (session.error as Partial<ApiError>).status
       : undefined
     if (status === 401) return <Navigate to="/login" replace />
-    return <main className="auth-page"><p className="error">{message(me.error)}</p></main>
+    return <main className="auth-page"><p className="error">{message(session.error)}</p></main>
   }
   return <Outlet />
 }

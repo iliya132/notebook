@@ -2,6 +2,7 @@ import { createServer as createHttpServer, request as httpRequest } from 'node:h
 import { request as httpsRequest } from 'node:https'
 import { readFile, stat } from 'node:fs/promises'
 import { dirname, extname, resolve, sep } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -15,6 +16,18 @@ const contentTypes = new Map([
   ['.svg', 'image/svg+xml'], ['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.webp', 'image/webp'],
   ['.ico', 'image/x-icon'], ['.woff', 'font/woff'], ['.woff2', 'font/woff2'], ['.map', 'application/json; charset=utf-8'],
 ])
+
+function record(timings, name, started, description) {
+  timings.push({ name, duration: performance.now() - started, description })
+}
+
+function serverTiming(timings) {
+  return timings.map(({ name, duration, description }) => {
+    const safeName = name.replace(/[^A-Za-z0-9_-]/g, '_')
+    const safeDescription = description?.replace(/["\\]/g, '')
+    return `${safeName};dur=${duration.toFixed(1)}${safeDescription ? `;desc="${safeDescription}"` : ''}`
+  }).join(', ')
+}
 
 let vite
 let productionRender
@@ -66,6 +79,8 @@ async function runViteMiddleware(req, res) {
 }
 
 const server = createHttpServer(async (req, res) => {
+  const requestStarted = performance.now()
+  const timings = []
   try {
     const requestUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
     if (requestUrl.pathname.startsWith('/api/')) return proxyApi(req, res)
@@ -74,14 +89,34 @@ const server = createHttpServer(async (req, res) => {
       return res.end()
     }
     if (production && await serveStatic(requestUrl.pathname, req, res)) return
-    if (!production && await runViteMiddleware(req, res)) return
+    if (!production) {
+      const middlewareStarted = performance.now()
+      const handled = await runViteMiddleware(req, res)
+      if (handled) return
+      record(timings, 'vite_middleware', middlewareStarted, 'Vite middleware')
+    }
 
+    const templateStarted = performance.now()
     let template = await readFile(templatePath, 'utf8')
+    record(timings, 'template', templateStarted, 'Read HTML template')
+    const moduleStarted = performance.now()
     const render = production ? productionRender : (await vite.ssrLoadModule('/src/entry-server.tsx')).render
-    if (!production) template = await vite.transformIndexHtml(requestUrl.pathname, template)
+    record(timings, 'ssr_module', moduleStarted, production ? 'Load SSR bundle' : 'Load SSR module')
+    if (!production) {
+      const transformStarted = performance.now()
+      template = await vite.transformIndexHtml(requestUrl.pathname, template)
+      record(timings, 'template_transform', transformStarted, 'Transform HTML template')
+    }
+    const renderStarted = performance.now()
     const result = await render(requestUrl.pathname + requestUrl.search, req.headers, apiOrigin.href)
+    record(timings, 'ssr', renderStarted, 'SSR data and render')
+    timings.push(...(result.timings ?? []))
+    const finishTimings = () => serverTiming([
+      { name: 'total', duration: performance.now() - requestStarted, description: 'HTML response' },
+      ...timings,
+    ])
     if (result.redirect) {
-      res.writeHead(result.status, { location: result.redirect, 'cache-control': 'no-store' })
+      res.writeHead(result.status, { location: result.redirect, 'cache-control': 'no-store', 'server-timing': finishTimings() })
       return res.end()
     }
     const html = template
@@ -92,6 +127,7 @@ const server = createHttpServer(async (req, res) => {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'private, no-store',
       vary: 'Cookie',
+      'server-timing': finishTimings(),
     })
     res.end(req.method === 'HEAD' ? undefined : html)
   } catch (error) {

@@ -195,6 +195,12 @@ class ApiEndpointIntegrationTest {
     String noteId = note.path("id").asText();
     mvc.perform(get("/api/v1/notes/{id}", noteId).cookie(owner))
         .andExpect(status().isOk())
+        .andExpect(
+            header()
+                .string(
+                    "Server-Timing",
+                    org.hamcrest.Matchers.matchesPattern(
+                        "app;dur=[0-9.]+;desc=\"Spring MVC and database\"")))
         .andExpect(jsonPath("$.content").value("# Draft"));
     mvc.perform(
             put("/api/v1/notes/{id}", noteId)

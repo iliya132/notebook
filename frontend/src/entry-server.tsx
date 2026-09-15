@@ -5,7 +5,7 @@ import { dehydrate, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import App from './App'
 import { createQueryClient } from './queryClient'
-import type { ApiError, Note, Notebook, NotebookDetail, PublicNote, User } from './types'
+import type { ApiError, Note, Notebook, NotebookDetail, PublicNote } from './types'
 
 type RequestHeaders = Record<string, string | string[] | undefined>
 
@@ -15,6 +15,13 @@ export type RenderResult = {
   head?: string
   status: number
   redirect?: string
+  timings?: ServerTiming[]
+}
+
+export type ServerTiming = {
+  name: string
+  duration: number
+  description?: string
 }
 
 class SsrApiError extends Error implements ApiError {
@@ -40,17 +47,30 @@ function header(headers: RequestHeaders, name: string): string | undefined {
   return Array.isArray(value) ? value.join('; ') : value
 }
 
-async function serverApi<T>(path: string, headers: RequestHeaders, apiOrigin: string): Promise<T> {
+function upstreamTiming(headerValue: string | null, prefix: string, timings: ServerTiming[]) {
+  if (!headerValue) return
+  for (const value of headerValue.split(',')) {
+    const name = value.match(/^\s*([A-Za-z0-9_-]+)/)?.[1]
+    const duration = Number(value.match(/;\s*dur=([0-9.]+)/)?.[1])
+    if (name && Number.isFinite(duration)) timings.push({ name: `${prefix}_${name}`, duration })
+  }
+}
+
+async function serverApi<T>(path: string, headers: RequestHeaders, apiOrigin: string, metric: string, timings: ServerTiming[]): Promise<T> {
+  const started = performance.now()
   let response: Response
   try {
     response = await fetch(new URL(`/api/v1${path}`, apiOrigin), {
       headers: { accept: 'application/json', cookie: header(headers, 'cookie') ?? '' },
     })
   } catch {
+    timings.push({ name: `api_${metric}`, duration: performance.now() - started, description: 'API request failed' })
     throw new SsrApiError(502, { code: 'api_unavailable', message: 'Сервис временно недоступен' })
   }
 
   const value = await response.json().catch(() => undefined) as Partial<ApiError> | T | undefined
+  timings.push({ name: `api_${metric}`, duration: performance.now() - started, description: `API ${metric}` })
+  upstreamTiming(response.headers.get('server-timing'), `api_${metric}`, timings)
   if (!response.ok) throw new SsrApiError(response.status, value as Partial<ApiError> | undefined)
   return value as T
 }
@@ -101,6 +121,7 @@ function renderApp(element: ReactNode): Promise<string> {
 }
 
 export async function render(url: string, headers: RequestHeaders, apiOrigin: string): Promise<RenderResult> {
+  const timings: ServerTiming[] = []
   const requestUrl = new URL(url, 'http://ssr.local')
   const path = requestUrl.pathname
   if (path === '/') return { status: 302, redirect: '/app' }
@@ -118,50 +139,43 @@ export async function render(url: string, headers: RequestHeaders, apiOrigin: st
   let title = path === '/register' ? 'Регистрация — Notebook' : path === '/login' ? 'Вход — Notebook' : 'Notebook'
 
   if (path.startsWith('/app')) {
-    try {
-      await client.fetchQuery({ queryKey: ['me'], queryFn: () => serverApi<User>('/auth/me', headers, apiOrigin) })
-    } catch (error) {
-      if (errorStatus(error) === 401) return { status: 302, redirect: `/login?next=${encodeURIComponent(path + requestUrl.search)}` }
-      status = errorStatus(error)
+    const notebookMatch = path.match(/^\/app\/notebooks\/([^/]+)\/?$/)
+    const noteMatch = path.match(/^\/app\/notes\/([^/]+)\/?$/)
+    const dataStarted = performance.now()
+    let matchedKey: readonly unknown[] = ['notebooks']
+    if (/^\/app\/?$/.test(path)) {
+      await client.prefetchQuery({ queryKey: ['notebooks'], queryFn: () => serverApi<Notebook[]>('/notebooks', headers, apiOrigin, 'notebooks', timings) })
+      title = 'Записные книжки — Notebook'
+    } else if (notebookMatch) {
+      const id = encodeURIComponent(notebookMatch[1])
+      matchedKey = ['notebook', notebookMatch[1]]
+      await client.prefetchQuery({ queryKey: matchedKey, queryFn: () => serverApi<NotebookDetail>(`/notebooks/${id}`, headers, apiOrigin, 'notebook', timings) })
+    } else if (noteMatch) {
+      const id = encodeURIComponent(noteMatch[1])
+      matchedKey = ['note', noteMatch[1]]
+      await client.prefetchQuery({ queryKey: matchedKey, queryFn: () => serverApi<Note>(`/notes/${id}`, headers, apiOrigin, 'note', timings) })
+    }
+    timings.push({ name: 'route_data', duration: performance.now() - dataStarted, description: 'Critical route data' })
+
+    const matchedState = client.getQueryState(matchedKey)
+    if (matchedState?.error) {
+      status = errorStatus(matchedState.error)
+      if (status === 401) return { status: 302, redirect: `/login?next=${encodeURIComponent(path + requestUrl.search)}`, timings }
     }
 
-    if (status === 200) {
-      const notebookMatch = path.match(/^\/app\/notebooks\/([^/]+)\/?$/)
-      const noteMatch = path.match(/^\/app\/notes\/([^/]+)\/?$/)
-      const queries: Promise<void>[] = []
-      if (/^\/app\/?$/.test(path)) {
-        queries.push(client.prefetchQuery({ queryKey: ['notebooks'], queryFn: () => serverApi<Notebook[]>('/notebooks', headers, apiOrigin) }))
-        title = 'Записные книжки — Notebook'
-      } else if (notebookMatch) {
-        const id = encodeURIComponent(notebookMatch[1])
-        queries.push(client.prefetchQuery({ queryKey: ['notebook', notebookMatch[1]], queryFn: () => serverApi<NotebookDetail>(`/notebooks/${id}`, headers, apiOrigin) }))
-      } else if (noteMatch) {
-        const id = encodeURIComponent(noteMatch[1])
-        queries.push(
-          client.prefetchQuery({ queryKey: ['note', noteMatch[1]], queryFn: () => serverApi<Note>(`/notes/${id}`, headers, apiOrigin) }),
-          client.prefetchQuery({ queryKey: ['share', noteMatch[1]], queryFn: () => serverApi(`/notes/${id}/share`, headers, apiOrigin) }),
-        )
-      }
-      await Promise.all(queries)
-
-      const matchedState = notebookMatch
-        ? client.getQueryState(['notebook', notebookMatch[1]])
-        : noteMatch
-          ? client.getQueryState(['note', noteMatch[1]])
-          : client.getQueryState(['notebooks'])
-      if (matchedState?.error) status = errorStatus(matchedState.error)
-
-      const notebook = notebookMatch ? client.getQueryData<NotebookDetail>(['notebook', notebookMatch[1]]) : undefined
-      const note = noteMatch ? client.getQueryData<Note>(['note', noteMatch[1]]) : undefined
-      if (notebook) title = `${notebook.title} — Notebook`
-      if (note) title = `${note.title} — Notebook`
-    }
+    // Every private data endpoint is protected by Spring Security. A successful
+    // route request therefore proves the session without a second /auth/me trip.
+    client.setQueryData(['session'], true)
+    const notebook = notebookMatch ? client.getQueryData<NotebookDetail>(['notebook', notebookMatch[1]]) : undefined
+    const note = noteMatch ? client.getQueryData<Note>(['note', noteMatch[1]]) : undefined
+    if (notebook) title = `${notebook.title} — Notebook`
+    if (note) title = `${note.title} — Notebook`
   }
 
   const publicMatch = path.match(/^\/share\/([^/]+)\/?$/)
   if (publicMatch) {
     const token = publicMatch[1]
-    await client.prefetchQuery({ queryKey: ['public', token], queryFn: () => serverApi<PublicNote>(`/public/notes/${encodeURIComponent(token)}`, headers, apiOrigin) })
+    await client.prefetchQuery({ queryKey: ['public', token], queryFn: () => serverApi<PublicNote>(`/public/notes/${encodeURIComponent(token)}`, headers, apiOrigin, 'public_note', timings) })
     const state = client.getQueryState(['public', token])
     if (state?.error) status = errorStatus(state.error)
     const note = client.getQueryData<PublicNote>(['public', token])
@@ -170,6 +184,7 @@ export async function render(url: string, headers: RequestHeaders, apiOrigin: st
 
   const router = createMemoryRouter([{ path: '*', element: <App /> }], { initialEntries: [path + requestUrl.search] })
   const dehydrated = dehydrate(client, { shouldDehydrateQuery: () => true })
+  const reactStarted = performance.now()
   const html = await renderApp(
     <StrictMode>
       <QueryClientProvider client={client}>
@@ -177,11 +192,13 @@ export async function render(url: string, headers: RequestHeaders, apiOrigin: st
       </QueryClientProvider>
     </StrictMode>,
   )
+  timings.push({ name: 'react', duration: performance.now() - reactStarted, description: 'React server render' })
 
   return {
     html,
     state: serialize(dehydrated),
     head: pageHead(title, publicMatch ? 'Публичная заметка только для чтения' : undefined),
     status,
+    timings,
   }
 }
