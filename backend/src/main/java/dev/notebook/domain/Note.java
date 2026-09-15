@@ -44,6 +44,10 @@ public class Note {
     return notebook.getId();
   }
 
+  public String getNotebookTitle() {
+    return notebook.getTitle();
+  }
+
   public String getTitle() {
     return title;
   }

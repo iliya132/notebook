@@ -1,8 +1,9 @@
 # Notebook
 
 Полноценное приложение личных Markdown-заметок: Java 21 / Spring Boot API,
-React / TypeScript с SSR и PostgreSQL. Поддерживает несколько книжек, безопасное
-автосохранение, cookie-сессии и отзывные публичные ссылки только для чтения.
+React / TypeScript с SSR и PostgreSQL. Поддерживает несколько книжек, глобальный
+поиск по заголовкам и содержимому заметок, безопасное автосохранение,
+cookie-сессии и отзывные публичные ссылки только для чтения.
 
 ## Архитектура и безопасность
 
@@ -10,6 +11,8 @@ React / TypeScript с SSR и PostgreSQL. Поддерживает несколь
 - Actuator/Micrometer экспортирует обезличенные HTTP, repository, Hibernate,
   HikariCP и JVM-метрики в локальный Prometheus; Grafana настраивается из файлов.
 - Все приватные выборки ограничены `owner_id`: подстановка чужого UUID даёт `404`.
+- Поиск `GET /api/v1/notes/search?q=...` также ограничен текущим владельцем,
+  ищет по заголовку и Markdown-содержимому и возвращает до 8 свежих совпадений.
 - Пароли хешируются BCrypt cost 12. Сессии хранятся в PostgreSQL; cookie имеет
   `HttpOnly`, `SameSite=Lax`, а в production ещё `Secure`.
 - Изменяющие запросы защищены Spring Security CSRF cookie/header. CORS разрешает

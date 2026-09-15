@@ -5,6 +5,7 @@ let csrfToken: string | undefined
 function metricPath(path: string): string {
   return path
     .replace(/^\/public\/notes\/[^/]+$/, '/public/notes/:token')
+    .replace(/^\/notes\/search(?:\?.*)?$/, '/notes/search')
     .replace(/^\/notes\/[^/]+\/share$/, '/notes/:id/share')
     .replace(/^\/notes\/[^/]+$/, '/notes/:id')
     .replace(/^\/notebooks\/[^/]+\/notes$/, '/notebooks/:id/notes')

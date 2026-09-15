@@ -47,6 +47,14 @@ public final class ApiDtos {
 
   public record NoteSummary(UUID id, String title, long version, Instant updatedAt) {}
 
+  public record NoteSearchResult(
+      UUID id,
+      UUID notebookId,
+      String notebookTitle,
+      String title,
+      String excerpt,
+      Instant updatedAt) {}
+
   public record NotebookDetail(
       UUID id,
       String title,

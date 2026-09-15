@@ -6,6 +6,7 @@ import dev.notebook.service.CurrentUser;
 import dev.notebook.service.NoteService;
 import dev.notebook.service.ShareService;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -27,6 +28,12 @@ public class NoteController {
   @GetMapping("/{id}")
   public NoteResponse get(Authentication auth, @PathVariable UUID id) {
     return notes.get(current.id(auth), id);
+  }
+
+  @GetMapping("/search")
+  public List<NoteSearchResult> search(
+      Authentication auth, @RequestParam(defaultValue = "") String q) {
+    return notes.search(current.id(auth), q);
   }
 
   @PutMapping("/{id}")

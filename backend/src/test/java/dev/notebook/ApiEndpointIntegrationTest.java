@@ -225,6 +225,43 @@ class ApiEndpointIntegrationTest {
   }
 
   @Test
+  void noteSearchMatchesTitlesAndContentWithoutLeakingOtherUsersNotes() throws Exception {
+    Cookie owner = register("Search owner", email());
+    String notebookId = createNotebook(owner, "Работа").path("id").asText();
+    createNote(owner, notebookId, "Квартальный план", "Цели команды");
+    createNote(owner, notebookId, "Встреча", "Обсудить квартальный бюджет и сроки");
+
+    Cookie intruder = register("Other owner", email());
+    String otherNotebookId = createNotebook(intruder, "Личное").path("id").asText();
+    createNote(intruder, otherNotebookId, "Квартальный секрет", "Не показывать");
+
+    mvc.perform(get("/api/v1/notes/search").param("q", "КВАРТАЛЬ").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(
+            jsonPath("$[*].notebookTitle")
+                .value(org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is("Работа"))))
+        .andExpect(
+            jsonPath(
+                "$[*].title",
+                org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("Квартальный секрет"))))
+        .andExpect(
+            jsonPath("$[?(@.title == 'Встреча')].excerpt")
+                .value(
+                    org.hamcrest.Matchers.hasItem(
+                        org.hamcrest.Matchers.containsString("квартальный бюджет"))));
+
+    mvc.perform(get("/api/v1/notes/search").param("q", "   ").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isEmpty());
+    mvc.perform(get("/api/v1/notes/search").param("q", "x".repeat(101)).cookie(owner))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.code").value("validation_failed"));
+    mvc.perform(get("/api/v1/notes/search").param("q", "кварталь"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   void sharingEndpointsCoverStatusRotationPublicReadAndRevocation() throws Exception {
     Cookie owner = register("Share owner", email());
     String notebookId = createNotebook(owner, "Shared").path("id").asText();
